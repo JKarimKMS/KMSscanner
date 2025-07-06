@@ -1,0 +1,2384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>KMS MAC Address Scanner</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2196F3">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KMS MAC Scanner">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512x512.png">
+    
+    <!-- Tesseract.js for OCR -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <style>
+        :root {
+            --kms-orange: #FF6B35;
+            --kms-pink: #E91E63;
+            --kms-purple: #9C27B0;
+            --kms-blue: #2196F3;
+            --kms-cyan: #00BCD4;
+            --kms-gradient: linear-gradient(135deg, #FF6B35, #E91E63, #9C27B0, #2196F3);
+            --kms-subtle-gradient: linear-gradient(135deg, rgba(255,107,53,0.1), rgba(33,150,243,0.1));
+            --kms-header-gradient: linear-gradient(135deg, rgba(255,107,53,0.15), rgba(33,150,243,0.15));
+            --bg-primary: #1a1a1e;
+            --bg-secondary: #2a2a2e;
+            --bg-tertiary: #353539;
+            --text-primary: #ffffff;
+            --text-secondary: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --status-success: var(--kms-blue);
+            --status-warning: var(--kms-orange);
+            --status-error: #f44336;
+            --status-queued: var(--kms-orange);
+            --status-new: var(--kms-purple);
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.1);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.15);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            line-height: 1.5;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            background-image: var(--kms-header-gradient);
+            padding: 1.5rem 1rem;
+            text-align: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--kms-gradient);
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .kms-logo {
+            font-size: 2rem;
+            font-weight: 800;
+            background: var(--kms-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .install-prompt {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--kms-gradient);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 25px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .offline-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--status-error);
+            color: white;
+            text-align: center;
+            padding: 0.75rem;
+            z-index: 1001;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+            box-shadow: var(--shadow-md);
+        }
+
+        .offline-indicator.show {
+            transform: translateY(0);
+        }
+
+        .offline-indicator.queue {
+            background: var(--status-warning);
+        }
+
+        .config-section {
+            background: var(--bg-secondary);
+            margin: 1.5rem;
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: var(--shadow-sm);
+            position: relative;
+        }
+
+        .config-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--kms-gradient);
+            border-radius: 16px 16px 0 0;
+        }
+
+        .config-section h3 {
+            color: var(--kms-blue);
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .config-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            align-items: center;
+        }
+
+        .config-row label {
+            min-width: 120px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .config-row input, .config-row select {
+            flex: 1;
+            padding: 0.875rem;
+            background: var(--bg-tertiary);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .config-row input:focus, .config-row select:focus {
+            outline: none;
+            border-color: var(--kms-blue);
+            box-shadow: 0 0 0 3px rgba(33,150,243,0.1);
+        }
+
+        .status-indicator {
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .status-ready {
+            background: rgba(33,150,243,0.15);
+            color: var(--kms-blue);
+            border: 1px solid var(--kms-blue);
+        }
+
+        .status-loading {
+            background: rgba(255,107,53,0.15);
+            color: var(--kms-orange);
+            border: 1px solid var(--kms-orange);
+        }
+
+        .status-error {
+            background: rgba(244,67,54,0.15);
+            color: var(--status-error);
+            border: 1px solid var(--status-error);
+        }
+
+        .status-warning {
+            background: rgba(255,193,7,0.15);
+            color: #FFC107;
+            border: 1px solid #FFC107;
+        }
+
+        .scanner-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            max-width: 600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        #video-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto 1.5rem;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            display: none;
+            border: 2px solid rgba(33,150,243,0.3);
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            max-height: 60vh;
+            object-fit: cover;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        .overlay-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #overlay {
+            width: 80%;
+            height: 100px;
+            border: 3px solid var(--kms-blue);
+            border-radius: 12px;
+            background: rgba(33,150,243,0.1);
+            box-shadow: 0 0 20px rgba(33,150,243,0.3);
+        }
+
+        .scan-guide {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+            padding: 0.75rem 1.25rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: white;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .capture-btn {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--kms-blue), var(--kms-purple));
+            border: 4px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all;
+            transition: all 0.3s ease;
+        }
+
+        .capture-btn:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+
+        .capture-btn::after {
+            content: '';
+            width: 60px;
+            height: 60px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--kms-blue), var(--kms-purple));
+            color: white;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-primary:active {
+            transform: translateY(1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-primary:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .btn-secondary:active {
+            background: var(--bg-secondary);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--kms-orange), var(--kms-pink));
+            color: white;
+        }
+
+        .manual-input {
+            margin-bottom: 1.5rem;
+        }
+
+        .manual-input input {
+            width: 100%;
+            padding: 1.25rem;
+            background: var(--bg-secondary);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 16px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+
+        .manual-input input:focus {
+            outline: none;
+            border-color: var(--kms-blue);
+            box-shadow: 0 0 0 3px rgba(33,150,243,0.1);
+        }
+
+        .filter-section {
+            background: var(--bg-secondary);
+            padding: 1.5rem;
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .filter-section h3 {
+            margin-bottom: 1rem;
+            font-size: 1rem;
+            color: var(--kms-cyan);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .filter-input {
+            flex: 1;
+            padding: 0.875rem;
+            background: var(--bg-tertiary);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--kms-cyan);
+            box-shadow: 0 0 0 3px rgba(0,188,212,0.1);
+        }
+
+        .filter-select {
+            padding: 0.875rem;
+            background: var(--bg-tertiary);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 16px;
+            min-width: 140px;
+            transition: all 0.3s ease;
+        }
+
+        .filter-stats {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 0.5rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+
+        .queue-indicator {
+            background: rgba(255,107,53,0.15);
+            color: var(--kms-orange);
+            border: 1px solid var(--kms-orange);
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: none;
+            animation: pulse 2s infinite;
+        }
+
+        .queue-indicator.show {
+            display: block;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .scanned-list {
+            flex: 1;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 1.5rem;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .scanned-list h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            color: var(--kms-blue);
+            font-weight: 600;
+        }
+
+        .scan-item {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .scan-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--status-error);
+            transition: all 0.3s ease;
+        }
+
+        .scan-item.new {
+            animation: highlight 2s ease;
+        }
+
+        .scan-item.queued::before {
+            background: var(--status-queued);
+        }
+
+        .scan-item.synced::before {
+            background: var(--status-success);
+        }
+
+        .scan-item.failed::before {
+            background: var(--status-error);
+        }
+
+        @keyframes highlight {
+            0% { 
+                background: rgba(156,39,176,0.2);
+                transform: scale(1.02);
+            }
+            100% { 
+                background: var(--bg-tertiary);
+                transform: scale(1);
+            }
+        }
+
+        .scan-item .mac {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            word-break: break-all;
+            color: var(--text-primary);
+        }
+
+        .scan-item .details {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .scan-item .details strong {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .status {
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            display: none;
+            font-weight: 600;
+            border: 1px solid;
+            transition: all 0.3s ease;
+        }
+
+        .status.success {
+            background: rgba(33,150,243,0.15);
+            color: var(--kms-blue);
+            border-color: var(--kms-blue);
+            display: block;
+        }
+
+        .status.error {
+            background: rgba(244,67,54,0.15);
+            color: var(--status-error);
+            border-color: var(--status-error);
+            display: block;
+        }
+
+        .count {
+            text-align: center;
+            font-size: 1.2rem;
+            margin: 1.5rem 0;
+            color: var(--kms-blue);
+            font-weight: 600;
+            padding: 1rem;
+            background: rgba(33,150,243,0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(33,150,243,0.2);
+        }
+
+        #camera-error {
+            display: none;
+            background: rgba(244,67,54,0.15);
+            color: var(--status-error);
+            padding: 1.25rem;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--status-error);
+        }
+
+        .ocr-status {
+            text-align: center;
+            padding: 1.25rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: none;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .processing {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--kms-blue);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.75rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .export-section {
+            margin-top: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .bulk-actions {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .searchable-select {
+            position: relative;
+            flex: 1;
+        }
+
+        .search-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: none;
+        }
+
+        #siteSearch {
+            width: 100%;
+            padding: 0.875rem;
+            background: var(--bg-tertiary);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        #siteSelect {
+            width: 100%;
+            opacity: 1;
+            position: relative;
+            z-index: 1;
+            height: 100%;
+        }
+        
+        @media (min-width: 768px) {
+            .search-container {
+                display: block;
+            }
+            
+            #siteSelect {
+                opacity: 0;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--kms-blue), var(--kms-purple));
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            z-index: 1000;
+            display: none;
+            animation: slideUp 0.3s ease;
+            font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0; 
+                transform: translateX(-50%) translateY(20px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateX(-50%) translateY(0); 
+            }
+        }
+
+        .btn.loading {
+            position: relative;
+            color: transparent;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @media (max-width: 600px) {
+            .header {
+                padding: 1rem;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .kms-logo {
+                font-size: 1.5rem;
+            }
+            
+            .header h1 {
+                font-size: 1.2rem;
+            }
+            
+            .scanner-container {
+                padding: 1rem;
+            }
+            
+            .btn {
+                padding: 0.875rem 1.25rem;
+                font-size: 0.95rem;
+            }
+
+            .config-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .config-row label {
+                min-width: auto;
+                margin-bottom: 0.5rem;
+                font-size: 0.9rem;
+            }
+            
+            .config-row input, 
+            .config-row select,
+            .searchable-select select {
+                height: 48px;
+                font-size: 16px;
+                -webkit-appearance: none;
+            }
+            
+            .btn {
+                min-height: 48px;
+                font-size: 1rem;
+            }
+            
+            .scan-item {
+                padding: 1.25rem 1rem;
+            }
+
+            .filter-row {
+                flex-direction: column;
+            }
+
+            .filter-select {
+                min-width: auto;
+                width: 100%;
+                height: 48px;
+            }
+
+            .export-section {
+                flex-direction: column;
+            }
+            
+            .export-section .btn {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+
+            .install-prompt {
+                bottom: 10px;
+                right: 10px;
+                font-size: 0.9rem;
+                padding: 10px 16px;
+            }
+            
+            .config-section {
+                margin: 1rem;
+                padding: 1.25rem;
+            }
+            
+            .filter-section {
+                padding: 1.25rem;
+            }
+            
+            .scanned-list {
+                padding: 1.25rem;
+                margin-bottom: 1rem;
+            }
+            
+            .scan-item .mac {
+                font-size: 1rem;
+            }
+            
+            .scan-item .details {
+                font-size: 0.8rem;
+            }
+            
+            .controls {
+                margin-bottom: 1rem;
+            }
+            
+            .bulk-actions .btn {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+            
+            .notification {
+                bottom: 20px;
+                left: 20px;
+                right: 20px;
+                transform: none;
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (hover: hover) and (pointer: fine) {
+            .scan-item:hover {
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-sm);
+            }
+
+            .btn:hover:not(:disabled) {
+                transform: translateY(-1px);
+                box-shadow: var(--shadow-md);
+            }
+
+            .config-section:hover {
+                border-color: rgba(33,150,243,0.2);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- PWA Install Prompt -->
+    <button id="installPrompt" class="install-prompt">Install App</button>
+
+    <!-- Offline indicator -->
+    <div id="offlineIndicator" class="offline-indicator">
+        <span id="offlineMessage">No internet connection</span>
+    </div>
+
+    <!-- Enhanced Header with KMS Branding -->
+    <div class="header">
+        <div class="header-content">
+            <div class="kms-logo">KMS</div>
+            <div>
+                <h1>MAC Address Scanner</h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="config-section">
+        <h3>Power Automate Configuration</h3>
+        
+        <div class="config-row">
+            <label for="siteSelect">Site:</label>
+            <div class="searchable-select">
+                <select id="siteSelect" required>
+                    <option value="">Loading sites...</option>
+                </select>
+                <div class="search-container">
+                    <input type="text" id="siteSearch" placeholder="Search sites...">
+                </div>
+            </div>
+        </div>
+        
+        <div class="config-row">
+            <label for="storeNumber">Store Number:</label>
+            <input type="text" 
+                   id="storeNumber" 
+                   placeholder="e.g., L2067"
+                   value="" 
+                   readonly 
+                   tabindex="-1" />
+        </div>
+        
+        <div class="config-row">
+            <label for="screenSelect">Screen Name:</label>
+            <select id="screenSelect" required>
+                <option value="">Select a site first</option>
+            </select>
+        </div>
+        
+        <div id="configStatus" class="status-indicator status-loading">
+            🔄 Loading store data from SharePoint...
+        </div>
+    </div>
+
+    <div class="scanner-container">
+        <div id="camera-error">
+            Camera access denied or not available. Please use manual input below.
+        </div>
+
+        <!-- Queue indicator -->
+        <div id="queueIndicator" class="queue-indicator">
+            <span id="queueMessage">Queue: 0 items waiting to sync</span>
+        </div>
+
+        <div class="ocr-status" id="ocrStatus">
+            <span class="processing"></span>
+            <span id="ocrMessage">Initializing scanner...</span>
+        </div>
+
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="overlay-container">
+                <div id="overlay"></div>
+            </div>
+            <div class="scan-guide">Position MAC address in blue frame</div>
+            <button class="capture-btn" id="captureBtn"></button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-primary">Start Camera</button>
+            <button id="stopBtn" class="btn btn-secondary" style="display: none;">Stop Camera</button>
+        </div>
+
+        <div class="manual-input">
+            <input type="text" 
+                   id="manualInput" 
+                   placeholder="Type MAC manually (e.g., AA:BB:CC:DD:EE:FF)" 
+                   autocomplete="off"
+                   autocorrect="off"
+                   autocapitalize="none"
+                   spellcheck="false" />
+        </div>
+
+        <!-- Enhanced Filter section -->
+        <div class="filter-section">
+            <h3>Search & Filter</h3>
+            <div class="filter-row">
+                <input type="text" 
+                       id="searchInput" 
+                       class="filter-input"
+                       placeholder="Search MAC addresses, sites, or screens..." 
+                       autocomplete="off" />
+                <select id="statusFilter" class="filter-select">
+                    <option value="all">All Status</option>
+                    <option value="synced">Synced</option>
+                    <option value="failed">Failed</option>
+                    <option value="queued">Queued</option>
+                </select>
+            </div>
+            <div class="filter-stats" id="filterStats">
+                Showing all items
+            </div>
+        </div>
+
+        <div class="count" id="count">Total Scanned: 0 | Synced: 0</div>
+
+        <div class="scanned-list">
+            <h2>Scanned MAC Addresses</h2>
+            <div id="scanResults"></div>
+        </div>
+
+        <div class="bulk-actions">
+            <button id="retryFailedBtn" class="btn btn-warning" style="display: none;">Retry Failed Syncs</button>
+            <button id="processQueueBtn" class="btn btn-primary" style="display: none;">Process Queue Now</button>
+        </div>
+
+        <div class="export-section">
+            <button id="exportBtn" class="btn btn-primary">Export CSV</button>
+            <button id="clearBtn" class="btn btn-secondary">Clear All</button>
+        </div>
+    </div>
+
+    <div id="notification" class="notification">
+        <span id="notificationMessage"></span>
+    </div>
+
+    <script>
+        // PWA Service Worker Registration
+        if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+            window.addEventListener('load', async () => {
+                try {
+                    const swCode = `
+                        const CACHE_NAME = 'kms-mac-scanner-v1';
+                        const urlsToCache = [
+                            '.',
+                            'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+                        ];
+
+                        self.addEventListener('install', event => {
+                            event.waitUntil(
+                                caches.open(CACHE_NAME)
+                                    .then(cache => cache.addAll(urlsToCache))
+                            );
+                        });
+
+                        self.addEventListener('fetch', event => {
+                            event.respondWith(
+                                caches.match(event.request)
+                                    .then(response => {
+                                        if (response) {
+                                            return response;
+                                        }
+                                        return fetch(event.request);
+                                    }
+                                )
+                            );
+                        });
+                    `;
+                    
+                    const blob = new Blob([swCode], { type: 'application/javascript' });
+                    const swUrl = URL.createObjectURL(blob);
+                    
+                    await navigator.serviceWorker.register(swUrl);
+                    console.log('Service Worker registered successfully');
+                } catch (error) {
+                    console.log('Service Worker registration failed:', error);
+                }
+            });
+        }
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        const installButton = document.getElementById('installPrompt');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installButton.style.display = 'block';
+        });
+
+        installButton.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`User response to the install prompt: ${outcome}`);
+                deferredPrompt = null;
+                installButton.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            installButton.style.display = 'none';
+            showNotification('App installed successfully!');
+        });
+
+        // Dynamic Store Data Manager - FIXED VERSION
+        class DynamicStoreManager {
+            constructor() {
+                this.storeData = {};
+                this.powerAutomateUrl = 'https://prod-34.uksouth.logic.azure.com:443/workflows/b4ab1a2e5c344320a371a8f8f5a2032f/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=OA32sjXs-NUh8W44TzDB2BV3EPes7zzI0BNdXrKGbIk';
+                this.cacheKey = 'kms_dynamic_store_cache';
+                this.cacheExpiry = 2 * 60 * 60 * 1000; // 2 hours
+                this.isLoading = false;
+            }
+
+            async init() {
+                console.log('🚀 Initializing dynamic store manager...');
+                await this.loadStoreData();
+                this.setupEventListeners();
+            }
+
+            async loadStoreData(forceRefresh = false) {
+                if (this.isLoading) return;
+                this.isLoading = true;
+
+                try {
+                    // Try cache first unless forcing refresh
+                    if (!forceRefresh) {
+                        const cached = this.getCachedData();
+                        if (cached && this.isCacheValid(cached.timestamp)) {
+                            console.log('📦 Using cached store data');
+                            this.storeData = cached.data;
+                            this.populateStoreDropdown();
+                            this.updateConfigStatus('✅ Store data loaded (cached)', 'ready');
+                            this.isLoading = false;
+                            
+                            // Check for updates in background
+                            setTimeout(() => this.checkForUpdates(), 5000);
+                            return;
+                        }
+                    }
+
+                    // Load from Power Automate
+                    this.updateConfigStatus('🔄 Loading store data from SharePoint...', 'loading');
+                    console.log('🌐 Fetching fresh store data from Power Automate...');
+
+                    const response = await fetch(this.powerAutomateUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ action: 'getStoreData' })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const excelData = await response.json();
+                    console.log('📊 Raw Excel data received:', excelData);
+
+                    // Transform Excel rows to store format
+                    this.storeData = this.transformExcelData(excelData);
+                    
+                    // Cache the data
+                    this.setCachedData(this.storeData);
+                    
+                    // Update UI
+                    this.populateStoreDropdown();
+                    this.updateConfigStatus(`✅ Loaded ${Object.keys(this.storeData).length} stores from SharePoint`, 'ready');
+                    
+                    console.log('✅ Store data loaded successfully:', this.storeData);
+
+                } catch (error) {
+                    console.error('❌ Failed to load store data:', error);
+                    await this.handleLoadError(error);
+                } finally {
+                    this.isLoading = false;
+                }
+            }
+
+            // TEMPORARY DEBUG VERSION - Replace the transformExcelData method with this
+// This will show us exactly what your Power Automate is returning
+
+transformExcelData(excelRows) {
+    const storeData = {};
+    
+    // Handle the response structure from Power Automate
+    let rows = excelRows;
+    if (excelRows.value) {
+        rows = excelRows.value;
+    } else if (excelRows.body && excelRows.body.value) {
+        rows = excelRows.body.value;
+    }
+    
+    if (!Array.isArray(rows)) {
+        console.error('Expected array of Excel rows, got:', typeof rows);
+        return this.getFallbackData();
+    }
+
+    console.log(`📈 Processing ${rows.length} Excel rows...`);
+    
+    // DEBUG: Let's see what the first few rows actually look like
+    console.log('🔍 DEBUGGING - First 3 rows structure:');
+    for (let i = 0; i < Math.min(3, rows.length); i++) {
+        console.log(`Row ${i}:`, rows[i]);
+        console.log(`Row ${i} keys:`, Object.keys(rows[i]));
+        console.log(`Row ${i} values:`, Object.values(rows[i]));
+    }
+    
+    // DEBUG: Let's see if there are any patterns in the data
+    if (rows.length > 0) {
+        const firstRow = rows[0];
+        console.log('🔍 First row analysis:');
+        console.log('Available properties:', Object.keys(firstRow));
+        
+        // Try to guess which fields might be our data
+        Object.keys(firstRow).forEach(key => {
+            const value = firstRow[key];
+            console.log(`${key}: "${value}" (type: ${typeof value})`);
+        });
+    }
+
+    // Let's try a more flexible approach to find the right fields
+    rows.forEach((row, index) => {
+        if (index < 10) { // Only log first 10 for debugging
+            console.log(`🔍 Row ${index} detailed analysis:`, row);
+        }
+        
+        try {
+            // Try multiple possible field name variations
+            let siteName = null;
+            let storeNumber = null;
+            let screenName = null;
+            
+            // Look for site name in various formats
+            const siteKeys = ['Site Name', 'siteName', 'Site_Name', 'SiteName', 'site', 'Site', 'SITE'];
+            const storeKeys = ['Store Number', 'storeNumber', 'Store_Number', 'StoreNumber', 'store', 'Store', 'STORE'];
+            const screenKeys = ['Screen Name', 'screenName', 'Screen_Name', 'ScreenName', 'screen', 'Screen', 'SCREEN'];
+            
+            // Try to find the site name
+            for (const key of siteKeys) {
+                if (row[key]) {
+                    siteName = row[key];
+                    break;
+                }
+            }
+            
+            // Try to find the store number
+            for (const key of storeKeys) {
+                if (row[key]) {
+                    storeNumber = row[key];
+                    break;
+                }
+            }
+            
+            // Try to find the screen name
+            for (const key of screenKeys) {
+                if (row[key]) {
+                    screenName = row[key];
+                    break;
+                }
+            }
+            
+            // If we still don't have values, try using positional access (column index)
+            if (!siteName && !storeNumber && !screenName) {
+                const values = Object.values(row);
+                if (values.length >= 3) {
+                    siteName = values[0];
+                    storeNumber = values[1];
+                    screenName = values[2];
+                    console.log(`Row ${index}: Using positional access - Site: "${siteName}", Store: "${storeNumber}", Screen: "${screenName}"`);
+                }
+            }
+
+            if (!siteName || !storeNumber || !screenName) {
+                if (index < 10) { // Only log first 10 to avoid spam
+                    console.warn(`Skipping incomplete row ${index}:`, row);
+                    console.warn(`Found - Site: "${siteName}", Store: "${storeNumber}", Screen: "${screenName}"`);
+                }
+                return;
+            }
+
+            // Clean up the values
+            siteName = String(siteName).trim();
+            storeNumber = String(storeNumber).trim();
+            screenName = String(screenName).trim();
+
+            // Initialize site if doesn't exist
+            if (!storeData[siteName]) {
+                storeData[siteName] = {
+                    storeNumber: storeNumber,
+                    screens: []
+                };
+            }
+
+            // Add screen if not already present
+            if (!storeData[siteName].screens.includes(screenName)) {
+                storeData[siteName].screens.push(screenName);
+            }
+
+            if (index < 5) { // Log first 5 successful entries
+                console.log(`✅ Successfully processed row ${index}: ${siteName} (${storeNumber}) - ${screenName}`);
+            }
+
+        } catch (error) {
+            console.error(`Error processing row ${index}:`, error, row);
+        }
+    });
+
+    console.log(`📈 Final result: Processed ${rows.length} Excel rows into ${Object.keys(storeData).length} stores`);
+    console.log('🏪 Final store data:', storeData);
+    
+    return Object.keys(storeData).length > 0 ? storeData : this.getFallbackData();
+}
+
+            async checkForUpdates() {
+                try {
+                    console.log('🔍 Checking for store data updates...');
+                    const response = await fetch(this.powerAutomateUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ action: 'getStoreData' })
+                    });
+
+                    if (response.ok) {
+                        const currentData = await response.json();
+                        const newStoreData = this.transformExcelData(currentData);
+                        const currentHash = this.hashData(newStoreData);
+                        const cachedHash = this.hashData(this.storeData);
+                        
+                        if (currentHash !== cachedHash) {
+                            console.log('📋 Store data updated - refreshing...');
+                            this.updateConfigStatus('📋 Store data updated - refreshing...', 'loading');
+                            await this.loadStoreData(true);
+                        }
+                    }
+                } catch (error) {
+                    console.log('Background update check failed:', error);
+                }
+            }
+
+            hashData(data) {
+                // Simple hash for change detection
+                return btoa(JSON.stringify(data)).slice(0, 16);
+            }
+
+            populateStoreDropdown() {
+                const siteSelect = document.getElementById('siteSelect');
+                if (!siteSelect) {
+                    console.error('siteSelect element not found');
+                    return;
+                }
+
+                // Clear existing options
+                siteSelect.innerHTML = '<option value="">Select Site</option>';
+
+                // Sort sites alphabetically
+                const sortedSites = Object.keys(this.storeData).sort();
+
+                sortedSites.forEach(site => {
+                    const option = document.createElement('option');
+                    option.value = site;
+                    option.textContent = `${site} (${this.storeData[site].storeNumber})`;
+                    siteSelect.appendChild(option);
+                });
+
+                console.log(`✅ Populated dropdown with ${sortedSites.length} sites`);
+            }
+
+            updateStoreInfo(siteName) {
+                if (!siteName || !this.storeData[siteName]) {
+                    console.warn('Site not found:', siteName);
+                    return;
+                }
+
+                const storeNumber = document.getElementById('storeNumber');
+                const screenSelect = document.getElementById('screenSelect');
+
+                // Update store number
+                if (storeNumber) {
+                    storeNumber.value = this.storeData[siteName].storeNumber;
+                }
+
+                // Update screen dropdown
+                if (screenSelect) {
+                    screenSelect.innerHTML = '<option value="">Select Screen</option>';
+                    
+                    this.storeData[siteName].screens.forEach(screen => {
+                        const option = document.createElement('option');
+                        option.value = screen;
+                        option.textContent = screen;
+                        screenSelect.appendChild(option);
+                    });
+                }
+
+                // Save configuration
+                this.saveConfig();
+            }
+
+            setupEventListeners() {
+                const siteSelect = document.getElementById('siteSelect');
+                const screenSelect = document.getElementById('screenSelect');
+
+                if (siteSelect) {
+                    siteSelect.addEventListener('change', (e) => {
+                        if (e.target.value) {
+                            this.updateStoreInfo(e.target.value);
+                        }
+                    });
+                }
+
+                if (screenSelect) {
+                    screenSelect.addEventListener('change', () => {
+                        this.saveConfig();
+                        this.checkConfigurationStatus();
+                    });
+                }
+
+                // Add refresh button
+                this.addRefreshButton();
+            }
+
+            addRefreshButton() {
+                const configSection = document.querySelector('.config-section h3');
+                if (configSection && !document.getElementById('refreshStoreData')) {
+                    const refreshBtn = document.createElement('button');
+                    refreshBtn.id = 'refreshStoreData';
+                    refreshBtn.innerHTML = '🔄';
+                    refreshBtn.title = 'Refresh store data from SharePoint';
+                    refreshBtn.style.cssText = `
+                        margin-left: 10px;
+                        padding: 5px 10px;
+                        border: none;
+                        border-radius: 6px;
+                        background: var(--kms-blue);
+                        color: white;
+                        cursor: pointer;
+                        font-size: 0.9rem;
+                        transition: all 0.3s ease;
+                    `;
+                    refreshBtn.onmouseover = () => refreshBtn.style.transform = 'scale(1.1)';
+                    refreshBtn.onmouseout = () => refreshBtn.style.transform = 'scale(1)';
+                    refreshBtn.onclick = () => this.refreshData();
+                    configSection.appendChild(refreshBtn);
+                }
+            }
+
+            async refreshData() {
+                console.log('🔄 Manual refresh requested');
+                const refreshBtn = document.getElementById('refreshStoreData');
+                if (refreshBtn) {
+                    refreshBtn.innerHTML = '⏳';
+                    refreshBtn.disabled = true;
+                }
+                
+                await this.loadStoreData(true);
+                
+                if (refreshBtn) {
+                    refreshBtn.innerHTML = '🔄';
+                    refreshBtn.disabled = false;
+                }
+            }
+
+            // FIXED: Single updateConfigStatus method with parameters
+            updateConfigStatus(message, type = 'ready') {
+                const configStatus = document.getElementById('configStatus');
+                if (configStatus) {
+                    configStatus.className = `status-indicator status-${type}`;
+                    configStatus.innerHTML = message;
+                }
+            }
+
+            // FIXED: Renamed method to avoid infinite loop
+            checkConfigurationStatus() {
+                const siteSelect = document.getElementById('siteSelect');
+                const storeNumber = document.getElementById('storeNumber');
+                const screenSelect = document.getElementById('screenSelect');
+                
+                const isConfigured = siteSelect?.value && 
+                                    storeNumber?.value.trim() && 
+                                    screenSelect?.value;
+                
+                if (isConfigured) {
+                    this.updateConfigStatus('✅ Power Automate configured and ready', 'ready');
+                } else {
+                    this.updateConfigStatus('⚠️ Please select site and screen', 'warning');
+                }
+            }
+
+            async handleLoadError(error) {
+                console.error('Store data load error:', error);
+                
+                // Try cached data as fallback
+                const cached = this.getCachedData();
+                if (cached) {
+                    console.log('📦 Using cached data as fallback');
+                    this.storeData = cached.data;
+                    this.populateStoreDropdown();
+                    this.updateConfigStatus('⚠️ Using cached data (SharePoint unavailable)', 'warning');
+                } else {
+                    // Use hardcoded fallback
+                    console.log('🔧 Using hardcoded fallback data');
+                    this.storeData = this.getFallbackData();
+                    this.populateStoreDropdown();
+                    this.updateConfigStatus('⚠️ Using default data (connection failed)', 'error');
+                }
+            }
+
+            getFallbackData() {
+                // Minimal fallback - keep a few key stores
+                return {
+                    "Didcot": {
+                        storeNumber: "L2067",
+                        screens: ["Biscuits/Hot Beverages", "Water", "P&S", "Spirits"]
+                    },
+                    "Herne Bay": {
+                        storeNumber: "L2320",
+                        screens: ["Sauces", "Canned", "Laundry/Tissues", "Pet"]
+                    },
+                    "Southampton Portswood": {
+                        storeNumber: "L2265",
+                        screens: ["Cereals", "Yogurts", "Laundry", "Pet"]
+                    }
+                };
+            }
+
+            // Cache management
+            getCachedData() {
+                try {
+                    const cached = localStorage.getItem(this.cacheKey);
+                    return cached ? JSON.parse(cached) : null;
+                } catch (error) {
+                    console.error('Cache read error:', error);
+                    return null;
+                }
+            }
+
+            setCachedData(data) {
+                try {
+                    localStorage.setItem(this.cacheKey, JSON.stringify({
+                        data: data,
+                        timestamp: Date.now()
+                    }));
+                } catch (error) {
+                    console.error('Cache write error:', error);
+                }
+            }
+
+            isCacheValid(timestamp) {
+                return Date.now() - timestamp < this.cacheExpiry;
+            }
+
+            saveConfig() {
+                const siteSelect = document.getElementById('siteSelect');
+                const screenSelect = document.getElementById('screenSelect');
+                
+                if (siteSelect) localStorage.setItem('selectedSite', siteSelect.value);
+                if (screenSelect) localStorage.setItem('selectedScreen', screenSelect.value);
+            }
+
+            loadConfig() {
+                const savedSite = localStorage.getItem('selectedSite');
+                const savedScreen = localStorage.getItem('selectedScreen');
+                
+                if (savedSite && this.storeData[savedSite]) {
+                    const siteSelect = document.getElementById('siteSelect');
+                    if (siteSelect) {
+                        siteSelect.value = savedSite;
+                        this.updateStoreInfo(savedSite);
+                        
+                        if (savedScreen) {
+                            setTimeout(() => {
+                                const screenSelect = document.getElementById('screenSelect');
+                                if (screenSelect) screenSelect.value = savedScreen;
+                                this.checkConfigurationStatus();
+                            }, 100);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Initialize the dynamic store manager
+        const dynamicStoreManager = new DynamicStoreManager();
+
+        // Hardcoded Power Automate URL for MAC submissions
+        const POWER_AUTOMATE_URL = "https://prod-28.uksouth.logic.azure.com:443/workflows/152741d859234323be80fdbdc40c1336/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=kGT7HUPlNkULS3_WHXz7SnuAcY5qWERcOgDZmEQ6Ymk";
+
+        // Store scanned MACs and offline queue
+        let scannedMACs = [];
+        let offlineQueue = [];
+        let stream = null;
+        let ocrWorker = null;
+        let isProcessing = false;
+        let ocrReady = false;
+        let syncedCount = 0;
+        let isOnline = navigator.onLine;
+        let filteredMACs = [];
+
+        // DOM elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const videoContainer = document.getElementById('video-container');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const manualInput = document.getElementById('manualInput');
+        const scanResults = document.getElementById('scanResults');
+        const status = document.getElementById('status');
+        const count = document.getElementById('count');
+        const exportBtn = document.getElementById('exportBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const cameraError = document.getElementById('camera-error');
+        const ocrStatus = document.getElementById('ocrStatus');
+        const ocrMessage = document.getElementById('ocrMessage');
+        const notification = document.getElementById('notification');
+        const notificationMessage = document.getElementById('notificationMessage');
+        const retryFailedBtn = document.getElementById('retryFailedBtn');
+
+        // Additional DOM elements for new features
+        const offlineIndicator = document.getElementById('offlineIndicator');
+        const offlineMessage = document.getElementById('offlineMessage');
+        const queueIndicator = document.getElementById('queueIndicator');
+        const queueMessage = document.getElementById('queueMessage');
+        const searchInput = document.getElementById('searchInput');
+        const statusFilter = document.getElementById('statusFilter');
+        const filterStats = document.getElementById('filterStats');
+        const processQueueBtn = document.getElementById('processQueueBtn');
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            
+            switch(e.key.toLowerCase()) {
+                case 's':
+                    e.preventDefault();
+                    if (!stream && !isProcessing) {
+                        startCamera();
+                    } else if (stream) {
+                        stopCamera();
+                    }
+                    break;
+                case 'c':
+                    e.preventDefault();
+                    if (stream && ocrReady && !isProcessing) {
+                        captureImage();
+                    }
+                    break;
+                case 'm':
+                    e.preventDefault();
+                    manualInput.focus();
+                    break;
+                case 'escape':
+                    e.preventDefault();
+                    if (stream) {
+                        stopCamera();
+                    }
+                    break;
+            }
+        });
+
+        function loadOfflineQueue() {
+            const saved = localStorage.getItem('macScannerQueue');
+            if (saved) {
+                try {
+                    offlineQueue = JSON.parse(saved);
+                    console.log('Loaded queue:', offlineQueue.length, 'items');
+                } catch (e) {
+                    console.error('Failed to load queue:', e);
+                    offlineQueue = [];
+                }
+            }
+            updateQueueIndicator();
+        }
+
+        function saveOfflineQueue() {
+            try {
+                localStorage.setItem('macScannerQueue', JSON.stringify(offlineQueue));
+            } catch (e) {
+                console.error('Failed to save queue:', e);
+            }
+        }
+
+        function updateQueueIndicator() {
+            if (offlineQueue.length > 0) {
+                queueMessage.textContent = `Queue: ${offlineQueue.length} item${offlineQueue.length === 1 ? '' : 's'} waiting to sync`;
+                queueIndicator.classList.add('show');
+                processQueueBtn.style.display = 'block';
+            } else {
+                queueIndicator.classList.remove('show');
+                processQueueBtn.style.display = 'none';
+            }
+        }
+
+        function updateOnlineStatus() {
+            isOnline = navigator.onLine;
+            
+            if (isOnline) {
+                offlineIndicator.classList.remove('show');
+                if (offlineQueue.length > 0) {
+                    setTimeout(() => {
+                        processOfflineQueue();
+                    }, 1000);
+                }
+            } else {
+                offlineMessage.textContent = 'No internet connection - items will be queued';
+                offlineIndicator.classList.add('show');
+                offlineIndicator.classList.remove('queue');
+            }
+        }
+
+        async function processOfflineQueue() {
+            if (offlineQueue.length === 0 || !isOnline) return;
+            
+            processQueueBtn.classList.add('loading');
+            showStatus(`Processing ${offlineQueue.length} queued items...`, 'success');
+            
+            let processed = 0;
+            let succeeded = 0;
+            
+            for (let i = 0; i < offlineQueue.length; i++) {
+                const queueItem = offlineQueue[i];
+                
+                try {
+                    const result = await sendToExcel(queueItem.data);
+                    processed++;
+                    
+                    if (result.success) {
+                        succeeded++;
+                        const macItem = scannedMACs.find(item => item.id === queueItem.id);
+                        if (macItem) {
+                            macItem.synced = true;
+                            macItem.queued = false;
+                            macItem.syncMessage = result.message;
+                            macItem.rowInfo = result.rowInfo;
+                            syncedCount++;
+                        }
+                        
+                        offlineQueue.splice(i, 1);
+                        i--;
+                    }
+                } catch (error) {
+                    console.error('Queue processing error:', error);
+                    processed++;
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            processQueueBtn.classList.remove('loading');
+            saveOfflineQueue();
+            updateQueueIndicator();
+            applyFilters();
+            updateDisplay();
+            
+            showStatus(`Queue processed: ${succeeded}/${processed} items synced successfully`, 
+                      succeeded === processed ? 'success' : 'error');
+        }
+
+        function addToOfflineQueue(macData) {
+            const queueItem = {
+                id: macData.id,
+                data: macData,
+                timestamp: Date.now()
+            };
+            
+            offlineQueue.push(queueItem);
+            saveOfflineQueue();
+            updateQueueIndicator();
+            
+            macData.queued = true;
+            macData.syncMessage = 'Queued for sync';
+        }
+
+        function applyFilters() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const statusFilterValue = statusFilter.value;
+            
+            filteredMACs = scannedMACs.filter(item => {
+                const matchesSearch = !searchTerm || 
+                    item.mac.toLowerCase().includes(searchTerm) ||
+                    (item.site && item.site.toLowerCase().includes(searchTerm)) ||
+                    (item.screenName && item.screenName.toLowerCase().includes(searchTerm)) ||
+                    (item.storeNumber && item.storeNumber.toLowerCase().includes(searchTerm));
+                
+                let matchesStatus = true;
+                if (statusFilterValue === 'synced') {
+                    matchesStatus = item.synced === true;
+                } else if (statusFilterValue === 'failed') {
+                    matchesStatus = item.synced === false && !item.queued;
+                } else if (statusFilterValue === 'queued') {
+                    matchesStatus = item.queued === true;
+                }
+                
+                return matchesSearch && matchesStatus;
+            });
+            
+            updateFilterStats();
+            updateDisplay();
+        }
+
+        function updateFilterStats() {
+            const total = scannedMACs.length;
+            const showing = filteredMACs.length;
+            const synced = scannedMACs.filter(item => item.synced).length;
+            const failed = scannedMACs.filter(item => !item.synced && !item.queued).length;
+            const queued = scannedMACs.filter(item => item.queued).length;
+            
+            if (showing === total) {
+                filterStats.textContent = `Showing all ${total} items (${synced} synced, ${failed} failed, ${queued} queued)`;
+            } else {
+                filterStats.textContent = `Showing ${showing} of ${total} items`;
+            }
+        }
+
+        function showNotification(message) {
+            notificationMessage.textContent = message;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+            
+            if ('vibrate' in navigator) {
+                navigator.vibrate(200);
+            }
+        }
+
+        async function initializeOCR() {
+            ocrStatus.style.display = 'block';
+            ocrMessage.textContent = 'Loading OCR engine...';
+            
+            try {
+                const worker = await Tesseract.createWorker('eng', 1, {
+                    logger: m => {
+                        if (m.status === 'loading tesseract core') {
+                            ocrMessage.textContent = 'Loading core...';
+                        } else if (m.status === 'initializing tesseract') {
+                            ocrMessage.textContent = 'Initializing...';
+                        } else if (m.status === 'loading language traineddata') {
+                            ocrMessage.textContent = 'Loading language data...';
+                        } else if (m.status === 'ready') {
+                            ocrMessage.textContent = '✓ Scanner ready!';
+                        }
+                    }
+                });
+                
+                await worker.setParameters({
+                    tessedit_char_whitelist: '0123456789ABCDEFabcdef:-. ',
+                });
+                
+                ocrWorker = worker;
+                ocrReady = true;
+                ocrMessage.innerHTML = '<span style="color: var(--kms-blue);">✓ Scanner ready!</span>';
+                
+                setTimeout(() => {
+                    ocrStatus.style.display = 'none';
+                }, 2000);
+                
+            } catch (err) {
+                console.error('OCR initialization error:', err);
+                ocrMessage.innerHTML = '<span style="color: var(--status-error);">Scanner failed to load - manual entry only</span>';
+                ocrReady = false;
+            }
+        }
+
+        const macPatterns = [
+            /([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})/g,
+            /([0-9A-Fa-f]{12})/g,
+            /([0-9A-Fa-f]{2}\s){5}([0-9A-Fa-f]{2})/g
+        ];
+
+        function findMACAddresses(text) {
+            const found = [];
+            text = text.toUpperCase().replace(/O/g, '0');
+            
+            for (const pattern of macPatterns) {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        const cleaned = formatMAC(match);
+                        if (isValidMAC(cleaned)) {
+                            found.push(cleaned);
+                        }
+                    });
+                }
+            }
+            
+            return [...new Set(found)];
+        }
+
+        function isValidMAC(mac) {
+            return /^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/.test(mac);
+        }
+
+        function formatMAC(mac) {
+            mac = mac.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+            if (mac.length === 12) {
+                return mac.match(/.{2}/g).join(':');
+            }
+            return mac;
+        }
+
+        async function sendToExcel(macData) {
+            try {
+                const payload = {
+                    macAddress: macData.mac,
+                    timestamp: macData.timestamp,
+                    source: macData.source,
+                    site: macData.site,
+                    storeNumber: macData.storeNumber,
+                    screenName: macData.screenName
+                };
+
+                console.log('Sending to Power Automate:', payload);
+                
+                const response = await fetch(POWER_AUTOMATE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Successfully sent to Excel:', result);
+                    return { 
+                        success: true, 
+                        message: result.message || 'Added to Excel',
+                        rowInfo: result.rowInfo || ''
+                    };
+                } else {
+                    console.error('Power Automate request failed:', response.status, response.statusText);
+                    return { 
+                        success: false, 
+                        message: `Failed: ${response.status}`,
+                        rowInfo: ''
+                    };
+                }
+            } catch (error) {
+                console.error('Error sending to Power Automate:', error);
+                return { 
+                    success: false, 
+                    message: `Error: ${error.message}`,
+                    rowInfo: ''
+                };
+            }
+        }
+
+        function addMAC(mac, source = 'Manual') {
+            mac = formatMAC(mac);
+            
+            if (!isValidMAC(mac)) {
+                showStatus('Invalid MAC address format', 'error');
+                return false;
+            }
+
+            if (scannedMACs.some(item => item.mac === mac)) {
+                showStatus('MAC already scanned!', 'error');
+                return false;
+            }
+
+            const timestamp = new Date().toLocaleString();
+            const siteSelect = document.getElementById('siteSelect');
+            const storeNumber = document.getElementById('storeNumber');
+            const screenSelect = document.getElementById('screenSelect');
+            
+            const macData = { 
+                mac, 
+                timestamp, 
+                source,
+                site: siteSelect.value,
+                storeNumber: storeNumber.value,
+                screenName: screenSelect.value,
+                synced: false,
+                queued: false,
+                id: Date.now(),
+                isNew: true
+            };
+            
+            scannedMACs.unshift(macData);
+            applyFilters();
+            updateDisplay();
+            
+            showNotification(`MAC captured: ${mac}`);
+            
+            if (isOnline) {
+                sendToExcel(macData).then(result => {
+                    macData.synced = result.success;
+                    macData.syncMessage = result.message;
+                    macData.rowInfo = result.rowInfo;
+                    
+                    if (result.success) {
+                        syncedCount++;
+                        const rowDisplay = result.rowInfo ? ` (${result.rowInfo})` : '';
+                        showStatus(`${mac} → ${result.message}${rowDisplay}`, 'success');
+                    } else {
+                        addToOfflineQueue(macData);
+                        showStatus(`${mac} → ${result.message} (queued for retry)`, 'error');
+                    }
+                    applyFilters();
+                    updateDisplay();
+                });
+            } else {
+                addToOfflineQueue(macData);
+                showStatus(`${mac} → Queued (offline)`, 'success');
+            }
+            
+            if ('vibrate' in navigator) {
+                navigator.vibrate(100);
+            }
+            
+            manualInput.value = '';
+            return true;
+        }
+
+        function updateDisplay() {
+            const itemsToShow = filteredMACs.length > 0 || searchInput.value || statusFilter.value !== 'all' 
+                               ? filteredMACs 
+                               : scannedMACs;
+            
+            scanResults.innerHTML = itemsToShow.map(item => {
+                let statusClass = 'failed';
+                let statusText = 'Failed';
+                
+                if (item.synced) {
+                    statusClass = 'synced';
+                    statusText = 'Synced';
+                } else if (item.queued) {
+                    statusClass = 'queued';
+                    statusText = 'Queued';
+                }
+                
+                return `
+                    <div class="scan-item ${statusClass} ${item.isNew ? 'new' : ''}">
+                        <span class="mac">${item.mac}</span>
+                        <span class="details">
+                            ${item.timestamp} • ${item.source}<br>
+                            <strong>${item.site || 'No site'} • ${item.screenName || 'No screen'}</strong><br>
+                            ${statusText}: ${item.syncMessage || (item.synced ? 'Synced' : item.queued ? 'Queued' : 'Sync failed')}
+                            ${item.rowInfo ? `<br>→ ${item.rowInfo}` : ''}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+            
+            scannedMACs.forEach(item => item.isNew = false);
+            
+            count.textContent = `Total Scanned: ${scannedMACs.length} | Synced: ${syncedCount}`;
+            
+            const hasFailed = scannedMACs.some(item => 
+                !item.synced && !item.queued && item.syncMessage && 
+                (item.syncMessage.includes('Failed') || item.syncMessage.includes('Error'))
+            );
+            retryFailedBtn.style.display = hasFailed ? 'block' : 'none';
+            
+            updateFilterStats();
+        }
+
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    status.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        async function startCamera() {
+            startBtn.classList.add('loading');
+            
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+                
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                };
+                
+                videoContainer.style.display = 'block';
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                cameraError.style.display = 'none';
+                
+            } catch (err) {
+                console.error('Camera error:', err);
+                cameraError.style.display = 'block';
+                showStatus('Camera not available', 'error');
+            } finally {
+                startBtn.classList.remove('loading');
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            video.srcObject = null;
+            videoContainer.style.display = 'none';
+            startBtn.style.display = 'block';
+            stopBtn.style.display = 'none';
+        }
+
+        async function captureImage() {
+            if (!ocrReady || isProcessing) {
+                if (!ocrReady) {
+                    showStatus('Scanner not ready yet', 'error');
+                }
+                return;
+            }
+
+            isProcessing = true;
+            status.style.display = 'none';
+            showStatus('Processing image...', 'success');
+            
+            try {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/png');
+                showStatus('Reading text with OCR...', 'success');
+                
+                const { data: { text } } = await ocrWorker.recognize(imageData);
+                const foundMACs = findMACAddresses(text);
+                
+                if (foundMACs.length > 0) {
+                    addMAC(foundMACs[0], 'Camera');
+                    showStatus('MAC address found and processed', 'success');
+                } else {
+                    showStatus('No MAC address found - try again', 'error');
+                    if ('vibrate' in navigator) {
+                        navigator.vibrate([100, 50, 100]);
+                    }
+                }
+                
+            } catch (err) {
+                console.error('Capture error:', err);
+                showStatus('Capture failed - try manual entry', 'error');
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        function exportToCSV() {
+            if (scannedMACs.length === 0) {
+                showStatus('No data to export', 'error');
+                return;
+            }
+
+            let csv = 'MAC Address,Timestamp,Source,Site,Store Number,Screen Name,Sync Status,Sync Message,Row Info\n';
+            scannedMACs.forEach(item => {
+                const syncStatus = item.synced ? 'Synced' : item.queued ? 'Queued' : 'Failed';
+                csv += `"${item.mac}","${item.timestamp}","${item.source}","${item.site || ''}","${item.storeNumber || ''}","${item.screenName || ''}","${syncStatus}","${item.syncMessage || ''}","${item.rowInfo || ''}"\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const siteSelect = document.getElementById('siteSelect');
+            a.download = `kms_mac_addresses_${siteSelect.value || 'unknown'}_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showStatus('Exported to CSV', 'success');
+        }
+
+        function clearAll() {
+            if (scannedMACs.length === 0) {
+                showStatus('No data to clear', 'error');
+                return;
+            }
+            
+            if (confirm('Clear all scanned MAC addresses and queue?')) {
+                scannedMACs = [];
+                offlineQueue = [];
+                syncedCount = 0;
+                saveOfflineQueue();
+                applyFilters();
+                updateDisplay();
+                updateQueueIndicator();
+                showStatus('All data cleared', 'success');
+            }
+        }
+
+        function retryFailedSyncs() {
+            const failedItems = scannedMACs.filter(item => 
+                !item.synced && !item.queued && item.syncMessage && 
+                (item.syncMessage.includes('Failed') || item.syncMessage.includes('Error'))
+            );
+            
+            let retryCount = 0;
+            
+            if (failedItems.length === 0) {
+                showStatus('No failed syncs to retry', 'success');
+                return;
+            }
+            
+            if (!isOnline) {
+                failedItems.forEach(item => {
+                    addToOfflineQueue(item);
+                });
+                showStatus(`${failedItems.length} items added to offline queue`, 'success');
+                applyFilters();
+                updateDisplay();
+                return;
+            }
+            
+            retryFailedBtn.classList.add('loading');
+            showStatus(`Retrying ${failedItems.length} failed syncs...`, 'success');
+            
+            failedItems.forEach((item, index) => {
+                setTimeout(async () => {
+                    try {
+                        const result = await sendToExcel(item);
+                        item.synced = result.success;
+                        item.syncMessage = result.message;
+                        item.rowInfo = result.rowInfo;
+                        
+                        if (result.success) {
+                            retryCount++;
+                            syncedCount++;
+                        } else {
+                            addToOfflineQueue(item);
+                        }
+                        
+                        applyFilters();
+                        updateDisplay();
+                        
+                        if (index === failedItems.length - 1) {
+                            retryFailedBtn.classList.remove('loading');
+                            showStatus(`Retry completed: ${retryCount}/${failedItems.length} succeeded`, 
+                                      retryCount > 0 ? 'success' : 'error');
+                        }
+                    } catch (error) {
+                        console.error('Retry failed for item:', item.mac, error);
+                    }
+                }, index * 500);
+            });
+        }
+
+        // Initialize app
+        window.addEventListener('load', async () => {
+            console.log('🚀 DOM loaded, initializing app...');
+            
+            // Initialize dynamic store manager first
+            await dynamicStoreManager.init();
+            
+            // Load saved configuration
+            dynamicStoreManager.loadConfig();
+            
+            // Initialize other functionality
+            loadOfflineQueue();
+            initializeOCR();
+            updateOnlineStatus();
+            
+            // Set up event listeners
+            if (startBtn) startBtn.addEventListener('click', startCamera);
+            if (stopBtn) stopBtn.addEventListener('click', stopCamera);
+            if (captureBtn) captureBtn.addEventListener('click', captureImage);
+            if (retryFailedBtn) retryFailedBtn.addEventListener('click', retryFailedSyncs);
+            if (processQueueBtn) processQueueBtn.addEventListener('click', processOfflineQueue);
+
+            if (manualInput) {
+                manualInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const mac = manualInput.value.trim();
+                        if (mac) {
+                            addMAC(mac, 'Manual');
+                        }
+                    }
+                });
+            }
+
+            if (exportBtn) exportBtn.addEventListener('click', exportToCSV);
+            if (clearBtn) clearBtn.addEventListener('click', clearAll);
+
+            if (searchInput) {
+                searchInput.addEventListener('input', applyFilters);
+                searchInput.addEventListener('focus', function() {
+                    if (this.value === '') {
+                        this.placeholder = 'Type to search MAC addresses, sites, or screens...';
+                    }
+                });
+                searchInput.addEventListener('keyup', function(e) {
+                    if (e.key === 'Escape') {
+                        this.value = '';
+                        if (statusFilter) statusFilter.value = 'all';
+                        applyFilters();
+                    }
+                });
+            }
+
+            if (statusFilter) statusFilter.addEventListener('change', applyFilters);
+            
+            // Initialize filters
+            filteredMACs = scannedMACs;
+            
+            console.log('✅ Initialization complete');
+        });
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+
+        window.addEventListener('beforeunload', () => {
+            if (ocrWorker) {
+                ocrWorker.terminate();
+            }
+            stopCamera();
+        });
+
+        // Auto-process queue every 30 seconds
+        setInterval(() => {
+            if (isOnline && offlineQueue.length > 0) {
+                console.log('Auto-processing queue...');
+                processOfflineQueue();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
